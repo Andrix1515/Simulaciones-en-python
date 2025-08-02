@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Río Mantaro 3D - Simulación de Flujo y Contaminación</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.26.0/plotly.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px 20px;
+            text-align: center;
+            border-bottom: 2px solid #4CAF50;
+        }
+        
+        .plot-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .control-group h3 {
+            margin-top: 0;
+            color: #4CAF50;
+            font-size: 16px;
+        }
+        
+        .slider-container {
+            margin: 10px 0;
+        }
+        
+        .slider-label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #ccc;
+        }
+        
+        .slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #ddd;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        
+        .slider:hover {
+            opacity: 1;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        
+        .city-checkbox {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+        }
+        
+        .city-checkbox input {
+            margin-right: 8px;
+        }
+        
+        .city-info {
+            font-size: 11px;
+            color: #aaa;
+            margin-left: 20px;
+        }
+        
+        .stats-panel {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+        
+        .legend {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            font-size: 11px;
+        }
+        
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            margin-right: 8px;
+        }
+        
+        .button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 12px;
+            transition: background 0.3s;
+        }
+        
+        .button:hover {
+            background: #45a049;
+        }
+        
+        .button.secondary {
+            background: #2196F3;
+        }
+        
+        .button.secondary:hover {
+            background: #1976D2;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="control-group">
+                <h3>⏱️ Control Temporal</h3>
+                <div class="slider-container">
+                    <label class="slider-label">Tiempo (días): <span id="timeValue">0</span></label>
+                    <input type="range" id="timeSlider" class="slider" min="0" max="30" value="0" step="0.1">
+                </div>
+                <div class="slider-container">
+                    <label class="slider-label">Velocidad: <span id="speedValue">1x</span></label>
+                    <input type="range" id="speedSlider" class="slider" min="0.1" max="3" value="1" step="0.1">
+                </div>
+                <button class="button" id="playPauseBtn">▶️ Reproducir</button>
+                <button class="button secondary" id="resetBtn">🔄 Reiniciar</button>
+            </div>
+            
+            <div class="control-group">
+                <h3>🏙️ Ciudades Fuente</h3>
+                <div class="city-checkbox">
+                    <input type="checkbox" id="city-yauli" checked>
+                    <label for="city-yauli">Yauli (La Oroya)</label>
+                </div>
+                <div class="city-info">0 km - 27.1 t/día</div>
+                
+                <div class="city-checkbox">
+                    <input type="checkbox" id="city-jauja" checked>
+                    <label for="city-jauja">Jauja</label>
+                </div>
+                <div class="city-info">53 km - 10.5 t/día</div>
+                
+                <div class="city-checkbox">
+                    <input type="checkbox" id="city-concepcion" checked>
+                    <label for="city-concepcion">Concepción</label>
+                </div>
+                <div class="city-info">81 km - 38.8 t/día</div>
+                
+                <div class="city-checkbox">
+                    <input type="checkbox" id="city-huancayo" checked>
+                    <label for="city-huancayo">Huancayo</label>
+                </div>
+                <div class="city-info">103 km - 382.5 t/día</div>
+                
+                <div class="city-checkbox">
+                    <input type="checkbox" id="city-chupaca" checked>
+                    <label for="city-chupaca">Chupaca</label>
+                </div>
+                <div class="city-info">114 km - 18.9 t/día</div>
+            </div>
+            
+            <div class="control-group">
+                <h3>⚙️ Parámetros</h3>
+                <div class="slider-container">
+                    <label class="slider-label">Decaimiento (k): <span id="decayValue">0.2</span></label>
+                    <input type="range" id="decaySlider" class="slider" min="0.1" max="0.5" value="0.2" step="0.01">
+                </div>
+                <div class="slider-container">
+                    <label class="slider-label">Caudal: <span id="flowValue">100%</span></label>
+                    <input type="range" id="flowSlider" class="slider" min="50" max="200" value="100" step="5">
+                </div>
+                <div class="slider-container">
+                    <label class="slider-label">Partículas: <span id="particlesValue">500</span></label>
+                    <input type="range" id="particlesSlider" class="slider" min="100" max="1000" value="500" step="50">
+                </div>
+            </div>
+            
+            <div class="stats-panel">
+                <h3>📊 Estadísticas</h3>
+                <div class="stat-item">
+                    <span>Contaminación Total:</span>
+                    <span id="totalPollution">477.8 t/día</span>
+                </div>
+                <div class="stat-item">
+                    <span>Zona Crítica:</span>
+                    <span id="criticalZone">Huancayo-Chupaca</span>
+                </div>
+                <div class="stat-item">
+                    <span>Concentración Máx:</span>
+                    <span id="maxConcentration">--</span>
+                </div>
+                <div class="stat-item">
+                    <span>Tiempo Dispersión:</span>
+                    <span id="dispersionTime">--</span>
+                </div>
+            </div>
+            
+            <div class="legend">
+                <h3>🎨 Leyenda</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #1f77b4;"></div>
+                    <span>Agua limpia</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff7f0e;"></div>
+                    <span>Contaminación baja</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #d62728;"></div>
+                    <span>Contaminación alta</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #2ca02c;"></div>
+                    <span>Ciudades fuente</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #9467bd;"></div>
+                    <span>Flujo de agua</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="header">
+                <h1>🏞️ Río Mantaro - Simulación 3D de Flujo y Dispersión de Contaminantes</h1>
+                <p>Modelo interactivo basado en datos reales del valle del Mantaro, Perú</p>
+            </div>
+            
+            <div class="plot-container">
+                <div id="plot3d"></div>
+                <div class="loading" id="loading">Cargando modelo 3D...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Datos de las ciudades
+        const citiesData = {
+            yauli: { x: 0, y: 25, z: 3200, pollution: 27.1, name: 'Yauli (La Oroya)', color: '#ff4444' },
+            jauja: { x: 53, y: 30, z: 3400, pollution: 10.5, name: 'Jauja', color: '#44ff44' },
+            concepcion: { x: 81, y: 35, z: 3300, pollution: 38.8, name: 'Concepción', color: '#4444ff' },
+            huancayo: { x: 103, y: 40, z: 3200, pollution: 382.5, name: 'Huancayo', color: '#ff44ff' },
+            chupaca: { x: 114, y: 45, z: 3100, pollution: 18.9, name: 'Chupaca', color: '#ffff44' }
+        };
+
+        // Variables globales
+        let animationId;
+        let currentTime = 0;
+        let isPlaying = false;
+        let particles = [];
+        let decayConstant = 0.2;
+        let flowRate = 1.0;
+        let particleCount = 500;
+
+        // Funciones auxiliares
+        function createRiverMesh(length, width, resolution) {
+            const x = [];
+            const y = [];
+            const z = [];
+            
+            for (let i = 0; i <= resolution; i++) {
+                const xRow = [];
+                const yRow = [];
+                const zRow = [];
+                
+                for (let j = 0; j <= resolution; j++) {
+                    const xPos = (i / resolution) * length;
+                    const yPos = (j / resolution) * width;
+                    
+                    // Crear elevación realista del terreno
+                    const elevation = 3400 - (xPos * 2.5) + 
+                                    Math.sin(xPos * 0.1) * 100 + 
+                                    Math.sin(yPos * 0.2) * 50;
+                    
+                    // Crear cauce del río
+                    const riverCenter = width / 2;
+                    const distanceFromCenter = Math.abs(yPos - riverCenter);
+                    const riverDepth = distanceFromCenter < 25 ? 
+                                     Math.max(0, 15 - distanceFromCenter * 0.6) : 0;
+                    
+                    xRow.push(xPos);
+                    yRow.push(yPos);
+                    zRow.push(elevation - riverDepth);
+                }
+                
+                x.push(xRow);
+                y.push(yRow);
+                z.push(zRow);
+            }
+            
+            return { x, y, z };
+        }
+
+        function calculatePollutionField(x, y, z, time) {
+            const concentration = [];
+            
+            for (let i = 0; i < x.length; i++) {
+                const concRow = [];
+                for (let j = 0; j < x[i].length; j++) {
+                    let totalConc = 0;
+                    const xPos = x[i][j];
+                    
+                    // Calcular concentración acumulativa de todas las ciudades
+                    Object.values(citiesData).forEach(city => {
+                        const checkbox = document.getElementById(`city-${city.name.toLowerCase().split(' ')[0]}`);
+                        if (checkbox && checkbox.checked && xPos >= city.x) {
+                            const distance = xPos - city.x;
+                            const dispersionTime = distance / (flowRate * 10); // velocidad del río
+                            
+                            if (time >= dispersionTime) {
+                                const concentration = city.pollution * decayConstant * 
+                                                   Math.exp(-decayConstant * distance);
+                                totalConc += concentration;
+                            }
+                        }
+                    });
+                    
+                    concRow.push(totalConc);
+                }
+                concentration.push(concRow);
+            }
+            
+            return concentration;
+        }
+
+        function createParticles(n) {
+            const newParticles = [];
+            
+            for (let i = 0; i < n; i++) {
+                Object.values(citiesData).forEach(city => {
+                    const checkbox = document.getElementById(`city-${city.name.toLowerCase().split(' ')[0]}`);
+                    if (checkbox && checkbox.checked) {
+                        newParticles.push({
+                            x: city.x + (Math.random() - 0.5) * 5,
+                            y: city.y + (Math.random() - 0.5) * 10,
+                            z: city.z,
+                            vx: flowRate * (5 + Math.random() * 5),
+                            vy: (Math.random() - 0.5) * 2,
+                            vz: 0,
+                            color: city.color,
+                            age: 0,
+                            maxAge: 100 + Math.random() * 200
+                        });
+                    }
+                });
+            }
+            
+            return newParticles;
+        }
+
+        function updateParticles() {
+            particles = particles.filter(p => p.age < p.maxAge && p.x < 120);
+            
+            particles.forEach(particle => {
+                particle.x += particle.vx * 0.1;
+                particle.y += particle.vy * 0.1;
+                particle.z += particle.vz * 0.1;
+                
+                // Simular turbulencia
+                particle.vx += (Math.random() - 0.5) * 0.5;
+                particle.vy += (Math.random() - 0.5) * 0.3;
+                
+                // Mantener en el río
+                if (particle.y < 20) particle.y = 20;
+                if (particle.y > 50) particle.y = 50;
+                
+                particle.age += 1;
+            });
+            
+            // Agregar nuevas partículas
+            if (particles.length < particleCount) {
+                particles.push(...createParticles(Math.min(10, particleCount - particles.length)));
+            }
+        }
+
+        function createVisualization() {
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            
+            const riverMesh = createRiverMesh(114, 70, 50);
+            const concentration = calculatePollutionField(riverMesh.x, riverMesh.y, riverMesh.z, currentTime);
+            
+            const traces = [];
+            
+            // Superficie del terreno
+            traces.push({
+                type: 'surface',
+                x: riverMesh.x,
+                y: riverMesh.y,
+                z: riverMesh.z,
+                surfacecolor: concentration,
+                colorscale: [
+                    [0, '#1f77b4'],
+                    [0.3, '#2ca02c'],
+                    [0.6, '#ff7f0e'],
+                    [1, '#d62728']
+                ],
+                opacity: 0.8,
+                name: 'Río Mantaro',
+                showscale: true,
+                colorbar: {
+                    title: 'Concentración<br>Contaminante<br>(t/día·km)',
+                    titlefont: { size: 12 },
+                    x: 1.02
+                }
+            });
+            
+            // Ciudades
+            Object.values(citiesData).forEach(city => {
+                const checkbox = document.getElementById(`city-${city.name.toLowerCase().split(' ')[0]}`);
+                if (checkbox && checkbox.checked) {
+                    traces.push({
+                        type: 'scatter3d',
+                        x: [city.x],
+                        y: [city.y],
+                        z: [city.z + 50],
+                        mode: 'markers+text',
+                        marker: {
+                            color: city.color,
+                            size: Math.sqrt(city.pollution) * 2,
+                            symbol: 'circle',
+                            line: { color: 'white', width: 2 }
+                        },
+                        text: [city.name],
+                        textposition: 'top center',
+                        textfont: { size: 10, color: 'white' },
+                        name: city.name,
+                        hovertemplate: `<b>${city.name}</b><br>` +
+                                     `Distancia: ${city.x} km<br>` +
+                                     `Contaminación: ${city.pollution} t/día<br>` +
+                                     `Elevación: ${city.z} m<extra></extra>`
+                    });
+                }
+            });
+            
+            // Partículas
+            if (particles.length > 0) {
+                traces.push({
+                    type: 'scatter3d',
+                    x: particles.map(p => p.x),
+                    y: particles.map(p => p.y),
+                    z: particles.map(p => p.z),
+                    mode: 'markers',
+                    marker: {
+                        color: particles.map(p => p.color),
+                        size: 3,
+                        opacity: particles.map(p => 1 - p.age / p.maxAge)
+                    },
+                    name: 'Partículas Contaminantes',
+                    hoverinfo: 'skip'
+                });
+            }
+            
+            // Vectores de flujo
+            const flowVectors = [];
+            for (let i = 0; i < 114; i += 20) {
+                flowVectors.push({
+                    type: 'cone',
+                    x: [i],
+                    y: [35],
+                    z: [3300],
+                    u: [flowRate * 10],
+                    v: [0],
+                    w: [0],
+                    sizemode: 'absolute',
+                    sizeref: 2,
+                    anchor: 'tip',
+                    colorscale: [[0, '#9467bd'], [1, '#9467bd']],
+                    showscale: false,
+                    name: 'Flujo de Agua'
+                });
+            }
+            traces.push(...flowVectors);
+            
+            const layout = {
+                title: {
+                    text: `Río Mantaro - Simulación 3D (Tiempo: ${currentTime.toFixed(1)} días)`,
+                    font: { size: 16, color: 'white' }
+                },
+                scene: {
+                    xaxis: {
+                        title: 'Distancia (km)',
+                        range: [0, 114],
+                        backgroundcolor: 'rgba(0,0,0,0)',
+                        gridcolor: 'rgba(255,255,255,0.3)',
+                        showbackground: true,
+                        zerolinecolor: 'rgba(255,255,255,0.5)'
+                    },
+                    yaxis: {
+                        title: 'Ancho (m)',
+                        range: [0, 70],
+                        backgroundcolor: 'rgba(0,0,0,0)',
+                        gridcolor: 'rgba(255,255,255,0.3)',
+                        showbackground: true,
+                        zerolinecolor: 'rgba(255,255,255,0.5)'
+                    },
+                    zaxis: {
+                        title: 'Elevación (m)',
+                        range: [3000, 3500],
+                        backgroundcolor: 'rgba(0,0,0,0)',
+                        gridcolor: 'rgba(255,255,255,0.3)',
+                        showbackground: true,
+                        zerolinecolor: 'rgba(255,255,255,0.5)'
+                    },
+                    bgcolor: 'rgba(0,0,0,0.8)',
+                    camera: {
+                        eye: { x: 1.5, y: 1.5, z: 1.2 },
+                        center: { x: 0, y: 0, z: 0 },
+                        up: { x: 0, y: 0, z: 1 }
+                    }
+                },
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: 'white' },
+                margin: { l: 0, r: 0, t: 50, b: 0 },
+                showlegend: true,
+                legend: {
+                    x: 0.02,
+                    y: 0.98,
+                    bgcolor: 'rgba(0,0,0,0.7)',
+                    bordercolor: 'rgba(255,255,255,0.3)',
+                    borderwidth: 1
+                }
+            };
+            
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'resetScale2d'],
+                displaylogo: false
+            };
+            
+            Plotly.newPlot('plot3d', traces, layout, config).then(() => {
+                loading.style.display = 'none';
+            });
+        }
+
+        function animate() {
+            if (!isPlaying) return;
+            
+            const speed = parseFloat(document.getElementById('speedSlider').value);
+            currentTime += 0.1 * speed;
+            
+            if (currentTime > 30) {
+                currentTime = 0;
+                particles = [];
+            }
+            
+            updateParticles();
+            document.getElementById('timeValue').textContent = currentTime.toFixed(1);
+            document.getElementById('timeSlider').value = currentTime;
+            
+            createVisualization();
+            
+            animationId = requestAnimationFrame(animate);
+        }
+
+        function updateStats() {
+            const activeCities = Object.values(citiesData).filter(city => {
+                const checkbox = document.getElementById(`city-${city.name.toLowerCase().split(' ')[0]}`);
+                return checkbox && checkbox.checked;
+            });
+            
+            const totalPollution = activeCities.reduce((sum, city) => sum + city.pollution, 0);
+            const maxPollutionCity = activeCities.reduce((max, city) => 
+                city.pollution > max.pollution ? city : max, { pollution: 0 });
+            
+            document.getElementById('totalPollution').textContent = `${totalPollution.toFixed(1)} t/día`;
+            document.getElementById('maxConcentration').textContent = 
+                `${(maxPollutionCity.pollution * decayConstant).toFixed(2)} t/día·km`;
+            document.getElementById('dispersionTime').textContent = 
+                `${(114 / (flowRate * 10)).toFixed(1)} días`;
+        }
+
+        // Event listeners
+        document.getElementById('playPauseBtn').addEventListener('click', function() {
+            isPlaying = !isPlaying;
+            this.textContent = isPlaying ? '⏸️ Pausar' : '▶️ Reproducir';
+            
+            if (isPlaying) {
+                animate();
+            } else {
+                cancelAnimationFrame(animationId);
+            }
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', function() {
+            isPlaying = false;
+            cancelAnimationFrame(animationId);
+            currentTime = 0;
+            particles = [];
+            document.getElementById('timeValue').textContent = '0';
+            document.getElementById('timeSlider').value = 0;
+            document.getElementById('playPauseBtn').textContent = '▶️ Reproducir';
+            createVisualization();
+        });
+
+        document.getElementById('timeSlider').addEventListener('input', function() {
+            currentTime = parseFloat(this.value);
+            document.getElementById('timeValue').textContent = currentTime.toFixed(1);
+            if (!isPlaying) {
+                createVisualization();
+            }
+        });
+
+        document.getElementById('speedSlider').addEventListener('input', function() {
+            document.getElementById('speedValue').textContent = `${this.value}x`;
+        });
+
+        document.getElementById('decaySlider').addEventListener('input', function() {
+            decayConstant = parseFloat(this.value);
+            document.getElementById('decayValue').textContent = this.value;
+            updateStats();
+            if (!isPlaying) {
+                createVisualization();
+            }
+        });
+
+        document.getElementById('flowSlider').addEventListener('input', function() {
+            flowRate = parseInt(this.value) / 100;
+            document.getElementById('flowValue').textContent = `${this.value}%`;
+            updateStats();
+        });
+
+        document.getElementById('particlesSlider').addEventListener('input', function() {
+            particleCount = parseInt(this.value);
+            document.getElementById('particlesValue').textContent = this.value;
+        });
+
+        // Checkboxes de ciudades
+        Object.keys(citiesData).forEach(cityKey => {
+            const checkbox = document.getElementById(`city-${cityKey}`);
+            if (checkbox) {
+                checkbox.addEventListener('change', function() {
+                    updateStats();
+                    if (!isPlaying) {
+                        createVisualization();
+                    }
+                });
+            }
+        });
+
+        // Inicialización
+        particles = createParticles(particleCount);
+        updateStats();
+        createVisualization();
+        
+        // Redimensionar cuando cambie el tamaño de la ventana
+        window.addEventListener('resize', function() {
+            Plotly.Plots.resize('plot3d');
+        });
+    </script>
+</body>
+</html>
